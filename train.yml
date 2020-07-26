@@ -1,0 +1,55 @@
+# train_dir:
+# val_dir:
+# train_labels_json:
+# val_labels_json:
+# output_dir:
+# group:
+# model_name:
+# model_path:
+# model_suffix:
+# train_samples:
+# val_samples:
+
+loss:
+optimizer: Adadelta
+# optimizer_parameters:
+
+metrices:
+  - accuracy
+
+network_parameters:
+  ch_num: 3
+  init_kernels: 32
+  kernel_size: 3
+  classes: 3
+  activation: sigmoid
+  conv_reps: 2
+
+epochs: 10
+target_height: 360
+target_width: 640
+
+train_gen:
+  width_shift_range: 0.1,
+  height_shift_range: 0.1
+  shear_range: 0.2
+  zoom_range: 0.2
+  horizontal_flip: true
+  rescale: 0.00392156
+
+train_flow:
+  color_mode: rgb
+  class_mode: categorical
+  batch_size: 4
+  shuffle: true
+  interpolation: nearest
+
+val_gen:
+  rescale: 0.00392156
+
+val_flow:
+  color_mode: rgb
+  class_mode: categorical
+  batch_size: 4
+  shuffle: true
+  interpolation: nearest
