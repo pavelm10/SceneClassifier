@@ -1,0 +1,11 @@
+flow:
+  class_mode: categorical
+  batch_size: 4
+  shuffle: false
+
+target_height: 360
+target_width: 640
+channels: 3
+
+#custom_layers:
+#  - LayerNormalization

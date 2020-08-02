@@ -3,6 +3,7 @@ import json
 import logging
 from logging.handlers import RotatingFileHandler
 import numpy as np
+import matplotlib.pyplot as plt
 import cv2
 import shutil
 import ruamel.yaml
@@ -49,7 +50,7 @@ def extract_labels(input_json, output_json=None, blacklist=None, mapping=None):
 
         if intersec:
             attr_keys = list(label['attributes'].keys())
-            new_dict = dict().fromkeys(attr_keys, label_data)
+            new_dict = dict(zip(attr_keys, label_data))
             extracted_labels[label['name']] = new_dict
 
     if output_json:
@@ -123,6 +124,17 @@ def bgr2rgb(image):
     return image[..., ::-1]
 
 
+def load_image(im_path, target_size=None, gray_scale=False):
+    image = cv2.imread(str(im_path), 1)
+    if target_size:
+        image = cv2.resize(image, target_size)
+    if gray_scale:
+        image = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+    else:
+        image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
+    return image
+
+
 def basic_logger(name='root', log_path=None, file_level=logging.INFO, stream_level=logging.INFO):
     log = logging.getLogger(name)
     log.setLevel(logging.INFO)
@@ -133,7 +145,7 @@ def basic_logger(name='root', log_path=None, file_level=logging.INFO, stream_lev
     log.addHandler(stream_hanlder)
 
     if log_path:
-        log_path.mkdir()
+        log_path.mkdir(exist_ok=True)
         logfile = log_path / f"{name}.log"
         file_handler = RotatingFileHandler(logfile, maxBytes=5242880, backupCount=3)
         file_handler.setFormatter(formatter)
@@ -143,20 +155,27 @@ def basic_logger(name='root', log_path=None, file_level=logging.INFO, stream_lev
     return log
 
 
-def create_keras_image_directory_tree(image_dir=None, output_dir=None, labels_json=None, group=None):
+def create_keras_image_directory_tree(image_dir=None, output_dir=None, labels_json=None, group=None, blacklist=None):
     image_dir = str2path(image_dir)
     output_dir = str2path(output_dir)
     labels = load_json(labels_json)
-    subdirs = list(set([label[group] for label in labels.values()]))
+    subdirs = list(set([label[group] for label in labels.values() if label[group] not in blacklist]))
+    images = list(image_dir.rglob("*.jpg"))
 
     for subdir in subdirs:
         subdir_path = output_dir / subdir
         subdir_path.mkdir(parents=True, exist_ok=True)
 
-    for name, label in labels.items():
-        im_src_path = image_dir / name
-        im_dest_path = output_dir / label[group] / name
-        shutil.copy(im_src_path.as_posix(), im_dest_path.as_posix())
+    for image in images:
+        try:
+            name = image.name
+            label = labels[name][group]
+            if label not in blacklist:
+                im_dest_path = output_dir / label / name
+                if not im_dest_path.exists():
+                    shutil.copy(image.as_posix(), im_dest_path.as_posix())
+        except KeyError:
+            continue
 
 
 def read_configs(cfg_path):
@@ -166,8 +185,72 @@ def read_configs(cfg_path):
 
 
 def load_keras_model(model_path, custom_objects=None):
-    from keras.models import load_model
+    from tensorflow import keras
+
     if custom_objects:
-        return load_model(model_path, custom_objects=custom_objects)
+        return keras.models.load_model(model_path, custom_objects=custom_objects)
     else:
-        return load_model(model_path)
+        return keras.models.load_model(model_path)
+
+
+def fix_annotation(image_dir=None, json_path=None, out_json_path=None, group=None):
+    data = load_json(json_path)
+    image_dir = str2path(image_dir)
+
+    for image_name, annotation in data.items():
+        impath = image_dir / image_name
+        if impath.exists():
+            image = cv2.imread(impath.as_posix(), 1)
+            plt.figure()
+            plt.imshow(image)
+            plt.show()
+            label = None
+            while label is None:
+                ret = input('Label (t, c, h, s): ')
+                if ret == 't':
+                    label = 'tunnel'
+                elif ret == 'c':
+                    label = 'city street'
+                elif ret == 'h':
+                    label = 'highway'
+                elif ret == 's':
+                    label = 'skip'
+                else:
+                    print(f'Unknown label {ret}, known are t=tunnel, c=city street, h=highway')
+            annotation[group] = label
+
+    if out_json_path:
+        store_json(out_json_path, data)
+
+
+def create_dataset_partition(data_dir, dest_dir, samples):
+    data_dir = str2path(data_dir)
+    dest_dir = str2path(dest_dir)
+    files = np.array(list(data_dir.rglob("*.jpg")))
+    idx = np.random.rand(len(files)).argsort()
+    idx = idx[:samples]
+    files = files[idx]
+    dest_dir.mkdir()
+    for file in files:
+        shutil.copy(file.as_posix(), dest_dir.as_posix())
+
+
+if __name__ == "__main__":
+    inpath = r'c:\DATA\SceneClassification\labels\bdd100k_labels_images_train.json'
+    outpath = r'c:\DATA\SceneClassification\labels\bdd100k_labels_images_train_extracted.json'
+    image_dir = r'c:\DATA\SceneClassification\images\100k\train'
+    outdir = r'c:\DATA\SceneClassification\images\100k\train_scene'
+    blacklist = ['gas stations', 'parking lot', 'undefined', 'skip']
+    mapping = {'residential': 'city street'}
+    # extract_labels(inpath, outpath, blacklist, mapping)
+    # create_keras_image_directory_tree(image_dir, outdir, outpath, 'scene', blacklist)
+    #
+    # outdir_undefined = r'c:\DATA\SceneClassification\images\100k\train_scene\undefined'
+    # fixed_json = r'c:\DATA\SceneClassification\labels\bdd100k_labels_images_train_extracted_fixed.json'
+    # fix_annotation(outdir_undefined, outpath, fixed_json, 'scene')
+    train_dir = r'c:\DATA\SceneClassification\images\100k\train'
+    val_dir = r'c:\DATA\SceneClassification\images\100k\val'
+    small_train = r'c:\DATA\SceneClassification\images\100k\train_partition'
+    small_val = r'c:\DATA\SceneClassification\images\100k\val_partition'
+    create_dataset_partition(train_dir, small_train, 500)
+    create_dataset_partition(val_dir, small_val, 50)

@@ -1,13 +1,12 @@
 from os import cpu_count
 import logging
 
-from keras.optimizers import Adadelta, SGD, Adam, Adagrad
 import tensorflow as tf
-import keras
+from tensorflow import keras
 
 import tools
-from accumulated_adadelta_optimizer import AccumAdadelta
 import dnns
+from accumulated_adadelta_optimizer import AccumAdadelta
 
 
 tf.compat.v1.logging.set_verbosity(tf.compat.v1.logging.ERROR)
@@ -20,16 +19,17 @@ if tf.test.is_gpu_available():
 
 class ModelBuilder:
 
-    KNOWN_MODELS = ['scenenet_v1']
+    KNOWN_MODELS = ['scene_net']
 
     KNOWN_MODES = tools.MODES
 
-    CUST_OBJS = {'AccumAdadelta': AccumAdadelta}
+    CUST_OBJS = {'AccumAdadelta': AccumAdadelta,
+                 'LayerNormalization': keras.layers.LayerNormalization}
 
-    OPTIMIZERS = {'Adadelta': Adadelta,
-                  'SGD': SGD,
-                  'Adam': Adam,
-                  'Adagrad': Adagrad,
+    OPTIMIZERS = {'Adadelta': keras.optimizers.Adadelta,
+                  'SGD': keras.optimizers.SGD,
+                  'Adam': keras.optimizers.Adam,
+                  'Adagrad': keras.optimizers.Adagrad,
                   'AccumAdadelta': AccumAdadelta,
                   }
 
@@ -37,21 +37,28 @@ class ModelBuilder:
         self.configs = configs
         self.log = logging.getLogger('root')
         self.mode = mode
-        self.model_name = model_name or configs['model_name']
-        self.classes = classes or configs['classes']
-        self.loss = loss or configs['loss']
-        self.model_path = tools.str2path(model_path or configs['model_path'])
-        self.optimizer_type = optimizer or configs['optimizer']
+        self.model_name = model_name or configs.get('model_name')
+        self.classes = classes or configs.get('classes')
+        self.loss = loss or configs.get('loss')
+        self.model_path = tools.str2path(model_path or configs.get('model_path'))
+        self.optimizer_type = optimizer or configs.get('optimizer')
         self.metrices_names = configs.get('metrices', [])
+        self.channels = configs.get('channels', 3)
+        self.input_shape = (configs.get('target_height'), configs.get('target_width'), self.channels)
         self.custom_objects = list()
 
         self._validate_input()
         self._add_custom_optimizer()
         self._add_custom_metrices()
         self._add_custom_loss()
+        self._add_custom_layers()
 
-        self._optimizer = self._init_optimizer()
         self._metrices = self._select_metrices()
+
+    def _add_custom_layers(self):
+        for layer in self.configs.get('custom_layers', []):
+            if layer in self.CUST_OBJS.keys():
+                self.custom_objects.append(layer)
 
     def _add_custom_optimizer(self):
         if self.optimizer_type in self.CUST_OBJS:
@@ -73,15 +80,18 @@ class ModelBuilder:
         if self.mode != 'train' and not self.model_path.exists():
             raise IOError(f'{self.model_path} does not exist')
 
-        if self.model_name not in self.KNOWN_MODELS:
+        if self.model_name is not None and self.model_name not in self.KNOWN_MODELS:
             raise IOError(f"Uknown model {self.model_name}, known are: {self.KNOWN_MODELS}")
 
     def _select_model(self):
         self.log.info(f'Network selected: {self.model_name}')
-        model = None
-        if self.model_name == 'scenenet_v1':
-            net = dnns.scenenet_v1
-            model = net(**self.configs.get('network_parameters', {}))
+        if self.model_name == 'scene_net':
+            net = dnns.scene_net
+
+        else:
+            raise ValueError(f"{self.model_name} is unknown")
+
+        model = net(self.input_shape, **self.configs.get('network_parameters', {}))
 
         return model
 
@@ -105,20 +115,22 @@ class ModelBuilder:
         for metric in self.metrices_names:
             if metric in self.CUST_OBJS:
                 metrices.append(self.CUST_OBJS[metric])
+            else:
+                metrices.append(metric)
         return metrices
 
     def build(self):
         model = None
         if self.mode == 'train':
             model = self._select_model()
-
-            model.compile(optimizer=self._optimizer, loss=self.loss, metrics=self._metrices)
+            optimizer = self._init_optimizer()
+            model.compile(optimizer=optimizer, loss=self.loss, metrics=self._metrices)
             self.log.info(f"Model created and compiled. Loss: {self.loss}, "
-                          f"optimizer: {self._optimizer}, metrics: {self._metrices}")
+                          f"optimizer: {optimizer}, metrics: {self._metrices}")
 
         elif self.mode != 'train':
             cust_objs = self._custom_objects()
-            model = tools.load_keras_model(self.model_path, custom_objects=cust_objs)
+            model = tools.load_keras_model(self.model_path.as_posix(), custom_objects=cust_objs)
 
             self.log.info(f"Model loaded from {self.model_path}")
 

@@ -10,7 +10,7 @@
 # train_samples:
 # val_samples:
 
-loss:
+loss: categorical_crossentropy
 optimizer: Adadelta
 # optimizer_parameters:
 
@@ -18,38 +18,34 @@ metrices:
   - accuracy
 
 network_parameters:
-  ch_num: 3
-  init_kernels: 32
-  kernel_size: 3
+  base_network: mobilenet_v2
+  out_filters: 0
+  dropout: 0
   classes: 3
-  activation: sigmoid
-  conv_reps: 2
+  activation: softmax
 
-epochs: 10
+epochs: 100
 target_height: 360
 target_width: 640
+channels: 3
 
 train_gen:
-  width_shift_range: 0.1,
-  height_shift_range: 0.1
-  shear_range: 0.2
-  zoom_range: 0.2
-  horizontal_flip: true
-  rescale: 0.00392156
+  width_shift_range: 0
+  height_shift_range: 0
+  shear_range: 0
+  zoom_range: 0
+  horizontal_flip: false
 
-train_flow:
-  color_mode: rgb
+flow:
   class_mode: categorical
-  batch_size: 4
+  batch_size: 16
   shuffle: true
   interpolation: nearest
 
-val_gen:
-  rescale: 0.00392156
+class_blacklist:
+  - gas stations
+  - parking lot
+  - undefined
+  - skip
 
-val_flow:
-  color_mode: rgb
-  class_mode: categorical
-  batch_size: 4
-  shuffle: true
-  interpolation: nearest
+weights_type: frequency

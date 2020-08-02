@@ -1,9 +1,9 @@
-from keras.optimizers import Optimizer
+from tensorflow import keras
 import keras.backend as K
 import tensorflow as tf
 
 
-class AccumAdadelta(Optimizer):
+class AccumAdadelta(keras.optimizers.Optimizer):
     def __init__(self, lr=1.0, rho=0.95, epsilon=None, decay=0., accum_iters=1,
                  **kwargs):
         if accum_iters < 1:

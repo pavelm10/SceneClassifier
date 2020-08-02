@@ -3,15 +3,18 @@ import logging
 from sklearn.preprocessing import LabelEncoder
 from keras.utils import to_categorical
 
-from tools import load_json
+import tools
 
 
 class Labels:
-    def __init__(self, json_labels=None, group=None):
+    def __init__(self, json_labels=None, data_dir=None, group=None):
         self._log = logging.getLogger('root')
         self._log.info(f'Loading labels from {json_labels} for group: {group}')
-        self._labels = load_json(json_labels)
+        self._labels = tools.load_json(json_labels)
         self._group = group
+        self._data_dir = tools.str2path(data_dir)
+
+        self._labels = self._filter_labels()
         self._group_labels = self._get_group_labels()
         self._numerical_labels, self._labels2num = self._get_numerical_labels()
         self._labels_counts = self._get_labels_counts()
@@ -23,7 +26,7 @@ class Labels:
 
     @property
     def image_names(self):
-        return np.array(list(self._labels.keys()))
+        return np.array([file for file in self._labels.keys()])
 
     @property
     def one_hot(self):
@@ -42,6 +45,10 @@ class Labels:
         return self._labels2num
 
     @property
+    def numerical2labels(self):
+        return {val: key for key, val in self._labels2num.items()}
+
+    @property
     def categorical(self):
         return self._group_labels
 
@@ -57,19 +64,31 @@ class Labels:
     def image2onehot(self):
         return self._image2one_hot
 
+    def _filter_labels(self):
+        new_labels = self._labels
+        if self._data_dir:
+            new_labels = dict()
+            images = [file.name for file in self._data_dir.rglob("*.jpg")]
+            for image in images:
+                try:
+                    new_labels[image] = self._labels[image]
+                except KeyError:
+                    continue
+        return new_labels
+
     def _get_proportions(self):
         labels_num = np.sort(list(self._labels_counts.keys()))
-        inverse = list()
+        proportions = dict()
         for num in labels_num:
-            inverse.append(self._labels_counts[num] / self._total_count)
-        return np.array(inverse)
+            proportions[num] = (self._labels_counts[num] / self._total_count)
+        return proportions
 
     def _get_inverse_frequency(self):
         labels_num = np.sort(list(self._labels_counts.keys()))
-        inverse = list()
+        inverse = dict()
         for num in labels_num:
-            inverse.append(1 / self._labels_counts[num])
-        return np.array(inverse)
+            inverse[num] = (1 / self._labels_counts[num]) * self._total_count / len(labels_num)
+        return inverse
 
     def _get_numerical_labels(self):
         label_encoder = LabelEncoder()
@@ -84,7 +103,7 @@ class Labels:
         unique = np.unique(self._numerical_labels)
         counts = dict()
         for unique_label in unique:
-            counts[unique_label] = np.sum(self._numerical_labels == unique_label)
+            counts[self.numerical2labels[unique_label]] = np.sum(self._numerical_labels == unique_label)
         return counts
 
     def _get_group_labels(self):
