@@ -155,27 +155,38 @@ def basic_logger(name='root', log_path=None, file_level=logging.INFO, stream_lev
     return log
 
 
-def create_keras_image_directory_tree(image_dir=None, output_dir=None, labels_json=None, group=None, blacklist=None):
+def create_keras_image_directory_tree(image_dir=None, output_dir=None, labels_json=None, group=None, blacklist=None, counts=None):
     image_dir = str2path(image_dir)
     output_dir = str2path(output_dir)
     labels = load_json(labels_json)
     subdirs = list(set([label[group] for label in labels.values() if label[group] not in blacklist]))
-    images = list(image_dir.rglob("*.jpg"))
+    images2classes = {cls: list() for cls in subdirs}
+    for im_name, label in labels.items():
+        if label[group] not in blacklist:
+            images2classes[label[group]].append(image_dir / im_name)
+    if counts:
+        for cls, images in images2classes.items():
+            try:
+                num = counts[cls]
+                idx = np.random.rand(len(images)).argsort()
+                idx = idx[:num]
+                images2classes[cls] = list(np.array(images)[idx])
+            except KeyError:
+                continue
 
     for subdir in subdirs:
         subdir_path = output_dir / subdir
         subdir_path.mkdir(parents=True, exist_ok=True)
 
-    for image in images:
-        try:
-            name = image.name
-            label = labels[name][group]
-            if label not in blacklist:
-                im_dest_path = output_dir / label / name
+    for cls, images in images2classes.items():
+        for image in images:
+            try:
+                name = image.name
+                im_dest_path = output_dir / cls / name
                 if not im_dest_path.exists():
                     shutil.copy(image.as_posix(), im_dest_path.as_posix())
-        except KeyError:
-            continue
+            except KeyError:
+                continue
 
 
 def read_configs(cfg_path):
@@ -239,11 +250,12 @@ if __name__ == "__main__":
     inpath = r'c:\DATA\SceneClassification\labels\bdd100k_labels_images_train.json'
     outpath = r'c:\DATA\SceneClassification\labels\bdd100k_labels_images_train_extracted.json'
     image_dir = r'c:\DATA\SceneClassification\images\100k\train'
-    outdir = r'c:\DATA\SceneClassification\images\100k\train_scene'
+    outdir = r'c:\DATA\SceneClassification\images\100k\train_small_keras'
     blacklist = ['gas stations', 'parking lot', 'undefined', 'skip']
     mapping = {'residential': 'city street'}
+    counts = {'city street': 4, 'highway': 3, 'tunnel': 2}
     # extract_labels(inpath, outpath, blacklist, mapping)
-    # create_keras_image_directory_tree(image_dir, outdir, outpath, 'scene', blacklist)
+    create_keras_image_directory_tree(image_dir, outdir, outpath, 'scene', blacklist, counts)
     #
     # outdir_undefined = r'c:\DATA\SceneClassification\images\100k\train_scene\undefined'
     # fixed_json = r'c:\DATA\SceneClassification\labels\bdd100k_labels_images_train_extracted_fixed.json'
@@ -252,5 +264,5 @@ if __name__ == "__main__":
     val_dir = r'c:\DATA\SceneClassification\images\100k\val'
     small_train = r'c:\DATA\SceneClassification\images\100k\train_partition'
     small_val = r'c:\DATA\SceneClassification\images\100k\val_partition'
-    create_dataset_partition(train_dir, small_train, 500)
-    create_dataset_partition(val_dir, small_val, 50)
+    # create_dataset_partition(train_dir, small_train, 500)
+    # create_dataset_partition(val_dir, small_val, 50)

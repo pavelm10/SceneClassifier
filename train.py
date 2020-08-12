@@ -25,14 +25,16 @@ def train(config_path, train_dir=None, val_dir=None, output_dir=None, train_labe
     group = group or configs['group']
     model_name = model_name or configs['model_name']
     model_suffix = model_suffix or configs['model_suffix']
+    train_counts = configs.get('train_class_counts')
+    val_counts = configs.get('val_class_counts')
 
     output_dir.mkdir(exist_ok=True)
 
     model_out_name = f'{model_name}_{group}_{model_suffix}.h5'
     model_path = output_dir / model_out_name
 
-    train_gen = DataGenerator(configs, train_dir, train_labels_json, 'train', group)
-    val_gen = DataGenerator(configs, val_dir, val_labels_json, 'val', group)
+    train_gen = DataGenerator(configs, train_dir, train_labels_json, 'train', group, train_counts)
+    val_gen = DataGenerator(configs, val_dir, val_labels_json, 'val', group, val_counts)
 
     epochs = configs['epochs']
     classes = configs['network_parameters']['classes']

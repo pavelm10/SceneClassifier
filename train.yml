@@ -28,6 +28,14 @@ epochs: 100
 target_height: 360
 target_width: 640
 channels: 3
+train_class_counts:
+  city street: 10
+  highway: 10
+  tunnel: 10
+val_class_counts:
+  city street: 10
+  highway: 10
+  tunnel: 10
 
 train_gen:
   width_shift_range: 0

@@ -1,6 +1,7 @@
 import logging
 import numpy as np
 import cv2
+import uuid
 
 from keras.preprocessing.image import ImageDataGenerator
 
@@ -13,7 +14,7 @@ class DataGenerator:
     MODES = tools.MODES
     GROUPS = tools.GROUPS
 
-    def __init__(self, config, image_dir=None, labels_json=None, mode=None, group=None):
+    def __init__(self, config, image_dir=None, labels_json=None, mode=None, group=None, class_counts=None):
         self.log = logging.getLogger('root')
         self.config = config
         self.image_dir = tools.str2path(image_dir)
@@ -26,9 +27,10 @@ class DataGenerator:
         self.color_mode = 'rgb' if self.channels == 3 else 'grayscale'
         self.target_imsize = (self.config['target_height'], self.config['target_width'])
         self.blacklist = self.config.get('class_blacklist', [])
+        self.class_counts = class_counts
 
         if labels_json:
-            self.keras_dir = self.image_dir.parent / f'{self.image_dir.name}_{self.group}'
+            self.keras_dir = self.image_dir.parent / f'{self.image_dir.name}_{self.group}_{str(uuid.uuid1())[:8]}'
             if not self.keras_dir.exists():
                 self.keras_dir.mkdir()
                 self.log.info(f'Creating Keras Directory Tree - {self.mode}...')
@@ -36,7 +38,8 @@ class DataGenerator:
                                                         self.keras_dir,
                                                         self.labels_json,
                                                         self.group,
-                                                        self.blacklist)
+                                                        self.blacklist,
+                                                        self.class_counts)
             else:
                 self.log.info('Skipped Keras Directory Tree creation as it already exists')
 
